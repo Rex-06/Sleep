@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SleepDiary">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>SleepDiary</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#151923;--muted:#737887;--accent:#4f46e5;--line:#e8e9ef;--good:#16a34a;--warn:#d97706;--bad:#dc2626}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;padding-bottom:92px}
+header{padding:calc(18px + env(safe-area-inset-top)) 20px 14px;background:var(--card);position:sticky;top:0;z-index:5;border-bottom:1px solid var(--line)}
+h1{font-size:28px;margin:0;font-weight:750}.sub{color:var(--muted);margin-top:4px}
+main{max-width:680px;margin:auto;padding:18px}
+.card{background:var(--card);border-radius:24px;padding:22px;margin-bottom:16px;box-shadow:0 2px 16px #1118270a}
+.hero{text-align:center;background:linear-gradient(145deg,#eef0ff,#fff)}
+.hero .big{font-size:54px;font-weight:800;letter-spacing:-2px;margin:8px 0}
+.badge{display:inline-block;padding:6px 11px;border-radius:99px;background:#e9edff;color:var(--accent);font-weight:650;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.metric{background:#f7f7fa;border-radius:17px;padding:15px}.metric b{font-size:20px;display:block;margin-top:4px}.muted{color:var(--muted)}
+button{border:0;border-radius:16px;padding:14px 16px;font-size:16px;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:white;width:100%}.secondary{background:#eef0f5;color:var(--text)}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:center;gap:8px;padding:10px 10px calc(10px + env(safe-area-inset-bottom));z-index:10}.nav button{background:none;color:var(--muted);flex:1;max-width:140px;padding:8px}.nav button.active{color:var(--accent)}
+.section-title{font-size:18px;font-weight:750;margin:22px 2px 12px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+input,textarea,select{width:100%;padding:13px;border:1px solid #dfe1e8;border-radius:13px;background:#fff;font:inherit;margin-top:6px}.field{margin-bottom:15px}label{font-weight:650;font-size:14px}
+.modal{position:fixed;inset:0;background:#0008;display:none;align-items:flex-end;z-index:20}.modal.show{display:flex}.sheet{background:#fff;width:100%;border-radius:26px 26px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}.sheet h2{margin-top:0}
+.calendar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.dow{text-align:center;font-size:12px;color:var(--muted);font-weight:700;padding:5px}.day{min-height:62px;border:1px solid var(--line);border-radius:11px;padding:6px;text-align:center;background:#fff}.day .num{font-weight:700}.day .hours{font-size:10px;margin-top:5px;font-weight:700}.green{color:var(--good)}.orange{color:var(--warn)}.red{color:var(--bad)}
+.bar{height:9px;background:#ececf2;border-radius:9px;overflow:hidden}.bar span{display:block;height:100%;background:var(--accent);border-radius:9px}
+.empty{text-align:center;padding:36px 15px;color:var(--muted)}
+small{color:var(--muted)}
+</style>
+</head>
+<body>
+<header><h1 id="title">Mi sueño</h1><div class="sub" id="subtitle"></div></header>
+<main id="app"></main>
+<nav class="nav">
+<button data-tab="home" onclick="showTab('home')">⌂<br><small>Inicio</small></button>
+<button data-tab="calendar" onclick="showTab('calendar')">▦<br><small>Calendario</small></button>
+<button data-tab="stats" onclick="showTab('stats')">▥<br><small>Estadísticas</small></button>
+</nav>
+
+<div class="modal" id="modal">
+<div class="sheet">
+<h2>Registrar sueño</h2>
+<div class="field"><label>Me acosté</label><input id="bed" type="datetime-local"></div>
+<div class="field"><label>Me levanté</label><input id="wake" type="datetime-local"></div>
+<div class="field"><label>Nota (opcional)</label><textarea id="note" rows="3" placeholder="¿Cómo dormiste?"></textarea></div>
+<button class="primary" onclick="saveEntry()">Guardar</button>
+<button class="secondary" style="width:100%;margin-top:9px" onclick="closeModal()">Cancelar</button>
+</div></div>
+
+<script>
+const KEY='sleepdiary.entries.v1', TARGET='sleepdiary.target.v1';
+let entries=JSON.parse(localStorage.getItem(KEY)||'[]'); let target=Number(localStorage.getItem(TARGET)||480);
+let tab='home', month=new Date(); month.setDate(1);
+
+const fmtDate=d=>new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short'}).format(new Date(d));
+const fmtTime=d=>new Intl.DateTimeFormat('es-ES',{hour:'2-digit',minute:'2-digit'}).format(new Date(d));
+const mins=e=>Math.max(0,Math.round((new Date(e.wake)-new Date(e.bed))/60000));
+const dur=m=>`${Math.floor(m/60)}h ${m%60}m`;
+const sorted=()=>entries.sort((a,b)=>new Date(b.bed)-new Date(a.bed));
+function quality(m){return m>=420?'green':m>=360?'orange':'red'}
+function dayKey(d){let x=new Date(d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`}
+function showTab(t){tab=t;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render()}
+function render(){document.getElementById('subtitle').textContent=new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(new Date()); if(tab==='home')home(); if(tab==='calendar')calendar(); if(tab==='stats')stats()}
+function home(){
+let e=sorted()[0]; document.getElementById('title').textContent='Mi sueño';
+document.getElementById('app').innerHTML=`<div class="card hero">${e?`<span class="badge">Última noche</span><div class="big">${dur(mins(e))}</div><div class="muted">${fmtDate(e.bed)} · ${fmtTime(e.bed)} → ${fmtTime(e.wake)}</div>`:`<div style="font-size:48px">🌙</div><h2>Aún no hay registros</h2><p class="muted">Añade tu primera noche para empezar.</p>`}</div>
+<div class="grid"><div class="metric">Objetivo<b>${dur(target)}</b></div><div class="metric">Diferencia<b>${e?(mins(e)-target>=0?'+':'')+dur(Math.abs(mins(e)-target)): '—'}</b></div></div>
+<div class="card" style="margin-top:16px"><button class="primary" onclick="openModal()">＋ Registrar sueño</button></div>
+${e?`<div class="section-title">Últimos registros</div><div class="card">${sorted().slice(0,7).map(row).join('')}</div>`:''}`;
+}
+function row(e){return `<div class="row"><div><b>${fmtDate(e.bed)}</b><br><small>${fmtTime(e.bed)} → ${fmtTime(e.wake)}</small></div><b class="${quality(mins(e))}">${dur(mins(e))}</b></div>`}
+function calendar(){
+document.getElementById('title').textContent='Calendario'; let y=month.getFullYear(),m=month.getMonth(); let first=new Date(y,m,1), days=new Date(y,m+1,0).getDate(), offset=(first.getDay()+6)%7;
+let cells=Array(offset).fill('').concat(Array.from({length:days},(_,i)=>i+1)); while(cells.length%7)cells.push('');
+let cellsHtml=cells.map(d=>{if(!d)return '<div></div>';let date=new Date(y,m,d),e=entries.find(x=>dayKey(x.bed)===dayKey(date));return `<div class="day" onclick="${e?`selectDay('${e.id}')`:''}"><div class="num">${d}</div>${e?`<div class="hours ${quality(mins(e))}">${dur(mins(e))}</div>`:'<div class="hours muted">—</div>'}</div>`}).join('');
+document.getElementById('app').innerHTML=`<div class="card"><div class="calendar-head"><button class="secondary" onclick="changeMonth(-1)">‹</button><b>${new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric'}).format(month)}</b><button class="secondary" onclick="changeMonth(1)">›</button></div><div class="calendar-grid">${['L','M','X','J','V','S','D'].map(x=>`<div class="dow">${x}</div>`).join('')}${cellsHtml}</div></div><div class="card"><small>🟢 ≥ 7 h &nbsp; 🟠 6–7 h &nbsp; 🔴 &lt; 6 h</small></div>`;
+}
+function changeMonth(n){month.setMonth(month.getMonth()+n);render()}
+function selectDay(id){let e=entries.find(x=>x.id===id);if(!e)return;alert(`${fmtDate(e.bed)}\n${fmtTime(e.bed)} → ${fmtTime(e.wake)}\nDuración: ${dur(mins(e))}${e.note?'\nNota: '+e.note:''}`)}
+function stats(){
+document.getElementById('title').textContent='Estadísticas';let a=sorted().slice(0,30),avg=a.length?Math.round(a.reduce((s,e)=>s+mins(e),0)/a.length):0,best=a.length?Math.max(...a.map(mins)):0,worst=a.length?Math.min(...a.map(mins)):0,total=a.reduce((s,e)=>s+mins(e),0),pct=Math.min(100,Math.round(avg/target*100));
+document.getElementById('app').innerHTML=`<div class="card"><h3>Últimos 30 registros</h3><div class="row"><span>Promedio</span><b>${a.length?dur(avg):'—'}</b></div><div class="row"><span>Total</span><b>${dur(total)}</b></div><div class="row"><span>Noches registradas</span><b>${a.length}</b></div></div>${a.length?`<div class="card"><h3>Promedio frente a objetivo</h3><div class="bar"><span style="width:${pct}%"></span></div><p class="muted">${pct}% de tu objetivo de ${dur(target)}</p></div>`:''}<div class="card"><h3>Objetivo</h3><div class="row"><span>Sueño objetivo</span><b>${dur(target)}</b></div><button class="secondary" style="width:100%" onclick="setTarget()">Cambiar objetivo</button></div>`;
+}
+function setTarget(){let h=prompt('Objetivo de sueño en horas (por ejemplo, 8)',target/60);if(h!==null){let n=Math.round(Number(h)*60);if(n>=240&&n<=720){target=n;localStorage.setItem(TARGET,target);render()}}}
+function openModal(){let now=new Date(),wake=new Date(now),bed=new Date(now);bed.setDate(bed.getDate()-1);bed.setHours(0,0,0,0);document.getElementById('bed').value=localISO(bed);document.getElementById('wake').value=localISO(wake);document.getElementById('note').value='';document.getElementById('modal').classList.add('show')}
+function localISO(d){let z=new Date(d.getTime()-d.getTimezoneOffset()*60000);return z.toISOString().slice(0,16)}
+function closeModal(){document.getElementById('modal').classList.remove('show')}
+function saveEntry(){let bed=new Date(document.getElementById('bed').value),wake=new Date(document.getElementById('wake').value),note=document.getElementById('note').value.trim();if(!(bed instanceof Date)||isNaN(bed)||isNaN(wake)||wake<=bed){alert('Revisa las horas.');return}entries.push({id:crypto.randomUUID(),bed:bed.toISOString(),wake:wake.toISOString(),note});localStorage.setItem(KEY,JSON.stringify(entries));closeModal();render()}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+showTab('home');
+</script>
+</body></html>
