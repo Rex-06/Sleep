@@ -1,0 +1,10 @@
+{
+  "name":"SleepDiary",
+  "short_name":"SleepDiary",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#f6f7fb",
+  "theme_color":"#111827",
+  "lang":"es",
+  "description":"Registro personal de horas de sueño con calendario y estadísticas."
+}
